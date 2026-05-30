@@ -282,6 +282,17 @@
   font-size: 11px;
 }
 .notif-delete-btn:hover { background: #c53030; color: white; }
+.notif-date-group { margin-top: 10px; }
+.notif-date-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 4px 2px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 8px;
+}
 
     .card {
       background: white;
@@ -1132,7 +1143,7 @@ style="grid-column: span 1;">
   <div style="display:flex; align-items:center; gap:14px;">
     <h2>Prior Orders</h2>
     <select id="financialYearSelect" onchange="switchFinancialYear()" style="padding:8px 12px; border:1px solid #ccc; border-radius:8px; font-size:13px; color:#2d3748; background:white; cursor:pointer;">
-      <option value="current">📅 2025-26 (Current)</option>
+      <option value="current">📅 2026-27 (Current)</option>
     </select>
     <span id="yearBadge" style="display:none; font-size:11px; padding:4px 10px; background:#fefcbf; color:#744210; border-radius:12px; border:1px solid #f6e05e;">📦 Viewing archived year</span>
   </div>
@@ -1231,7 +1242,22 @@ async function loadOrdersFromSheet() {
       ordersToLoad.forEach(order => {
         const isDeleted = order.status === 'deleted';
         const items = JSON.parse(order.items || '[]');
-        const orderData = JSON.stringify(JSON.stringify(items));
+
+        // Build the full order object passed to PDF functions
+        // Must be a JSON string of an array (buildOrderPDF expects orders[0])
+        const orderData = JSON.stringify(JSON.stringify([{
+          orderNumber:     order.orderNumber,
+          buyerName:       order.buyerName,
+          country:         order.country,
+          destinationPort: order.destinationPort,
+          grandTotal:      order.grandTotal,
+          postedBy:        order.postedBy,
+          postedDate:      order.postedDate,
+          editedBy:        order.editedBy || '',
+          editedAt:        order.editedAt || '',
+          status:          order.status,
+          items:           items
+        }]));
 
         const row = document.createElement('tr');
 
@@ -1389,9 +1415,6 @@ async function restoreSession() {
     return;
   }
 
-  currentUserAccount = freshUser;
-  loggedInProfile = freshUser.displayName;
-
   currentUserAccount = savedUser;
   loggedInProfile = savedUser.displayName;
 
@@ -1422,8 +1445,17 @@ async function restoreSession() {
 async function initApp() {
   const saved = sessionStorage.getItem('loggedInUser');
   if (saved) {
-    await restoreSession();
-} else {
+    try {
+      await restoreSession();
+    } catch(err) {
+      // If anything goes wrong during restore, clear session and show login
+      console.error('Session restore failed:', err);
+      sessionStorage.removeItem('loggedInUser');
+      document.getElementById('appSpinner').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'none';
+      document.getElementById('loginPage').style.display = 'flex';
+    }
+  } else {
     document.getElementById('appSpinner').style.display = 'none';
     document.getElementById('loginPage').style.display = 'flex';
   }
@@ -2253,7 +2285,7 @@ function buildOrderPDF(orderDataString, callback) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(10);
     doc.text(`Order No: ${firstOrder.orderNumber}`, pageWidth - margin, 23, { align: 'right' });
-    doc.text(`Date: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin, 29, { align: 'right' });
+    doc.text(`Date: ${firstOrder.postedDate || new Date().toLocaleDateString('en-GB')}`, pageWidth - margin, 29, { align: 'right' });
 
     // Divider line
     const dividerY = logoH + 10;
@@ -2327,7 +2359,9 @@ const s2Top = dividerY + 6;
     let grandTotal = 0;
     const pageLimit = 282;
 
-    orders.forEach((item, index) => {
+    // items are nested inside firstOrder.items (full order object structure)
+    const itemList = Array.isArray(firstOrder.items) ? firstOrder.items : orders;
+    itemList.forEach((item, index) => {
       grandTotal += item.total;
 
       // Page break if needed
@@ -2611,15 +2645,59 @@ function updateAllNotifList() {
     list.innerHTML = '<div class="notif-empty">No notifications yet</div>';
     return;
   }
-  list.innerHTML = notifications.map(n => `
-    <div class="all-notif-item ${n.type}" id="notif-${n.id}">
-      <div class="notif-icon">${n.icon}</div>
-      <div class="all-notif-body">
-        <div class="all-notif-title">${n.title}</div>
-        <div class="all-notif-msg">${n.message}</div>
-      </div>
-      <div class="all-notif-time">${n.time}</div>
-      <button class="notif-delete-btn" onclick="deleteNotification(${n.id})">🗑 Delete</button>
+
+  // Parse dd/MM/yyyy date string into a sortable number (yyyyMMdd)
+  function parseDateVal(dateStr) {
+    if (!dateStr) return 0;
+    const parts = String(dateStr).split('/');
+    if (parts.length !== 3) return 0;
+    return parseInt(parts[2] + parts[1] + parts[0], 10); // yyyyMMdd
+  }
+
+  // Sort newest date first, then within same date newest time first
+  const sorted = [...notifications].sort((a, b) => {
+    const dateDiff = parseDateVal(b.date) - parseDateVal(a.date);
+    if (dateDiff !== 0) return dateDiff;
+    // Same date — sort by time (HH:mm) descending
+    return String(b.time || '').localeCompare(String(a.time || ''));
+  });
+
+  // Group by date
+  const groups = {};
+  const groupOrder = [];
+  sorted.forEach(n => {
+    const key = n.date || 'Unknown Date';
+    if (!groups[key]) {
+      groups[key] = [];
+      groupOrder.push(key);
+    }
+    groups[key].push(n);
+  });
+
+  // Format date label — show "Today", "Yesterday", or the actual date
+  function formatDateLabel(dateStr) {
+    const today = new Date().toLocaleDateString('en-GB');
+    const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-GB');
+    if (dateStr === today) return 'Today';
+    if (dateStr === yesterday) return 'Yesterday';
+    return dateStr;
+  }
+
+  // Build HTML grouped by date
+  list.innerHTML = groupOrder.map(dateKey => `
+    <div class="notif-date-group">
+      <div class="notif-date-label">${formatDateLabel(dateKey)}</div>
+      ${groups[dateKey].map(n => `
+        <div class="all-notif-item ${n.type}" id="notif-${n.id}">
+          <div class="notif-icon">${n.icon}</div>
+          <div class="all-notif-body">
+            <div class="all-notif-title">${n.title}</div>
+            <div class="all-notif-msg">${n.message}</div>
+          </div>
+          <div class="all-notif-time">${n.time}</div>
+          <button class="notif-delete-btn" onclick="deleteNotification(${n.id})">🗑 Delete</button>
+        </div>
+      `).join('')}
     </div>
   `).join('');
 }
@@ -2838,7 +2916,7 @@ function generateOrderPDF(orders, autoPrint = false) {
 
     <p>
       <strong>Date:</strong>
-      ${new Date().toLocaleDateString('en-GB')}
+      ${firstOrder.postedDate || new Date().toLocaleDateString('en-GB')}
     </p>
 
   </div>

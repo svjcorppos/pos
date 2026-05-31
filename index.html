@@ -2553,17 +2553,16 @@ rows.forEach((tr, index) => {
     const total = qty * price;
     newGrandTotal += total;
 
-updatedOrders.push({
-      ...(editingOrderData[index] || editingOrderData[0]),
+const originalItem = Array.isArray(editingOrderData[0].items)
+      ? (editingOrderData[0].items[index] || {})
+      : (editingOrderData[index] || {});
+
+    updatedOrders.push({
+      ...originalItem,
       product,
       qty,
       price,
-      total,
-      buyerName,
-      country,
-      destinationPort: destPort,
-      editedBy: loggedInProfile,
-      editedAt: new Date().toLocaleString('en-GB')
+      total
     });
   });
 

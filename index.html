@@ -2574,8 +2574,20 @@ updatedOrders.push({
   cells[3].innerHTML = `<span style="color:#d69e2e;">${loggedInProfile}</span>`;
   cells[4].innerHTML = `<span style="color:#d69e2e;">${new Date().toLocaleDateString('en-GB')}</span>`;
 
-  // Update dropdown with new data
-  const newOrderData = JSON.stringify(JSON.stringify(updatedOrders));
+  // Update dropdown with new data — full order object so postedDate is preserved in PDF
+  const newOrderData = JSON.stringify(JSON.stringify([{
+    orderNumber:     editingOrderData[0].orderNumber,
+    buyerName:       buyerName,
+    country:         country,
+    destinationPort: destPort,
+    grandTotal:      newGrandTotal,
+    postedBy:        editingOrderData[0].postedBy || '',
+    postedDate:      editingOrderData[0].postedDate || '',
+    editedBy:        loggedInProfile,
+    editedAt:        new Date().toLocaleString('en-GB'),
+    status:          'active',
+    items:           updatedOrders
+  }]));
   const divs = editingRow.querySelectorAll('.dropdown-menu div');
   divs[0].setAttribute('onclick', `viewOrderPDF(${newOrderData})`);
   divs[1].setAttribute('onclick', `downloadOrderPDF(${newOrderData})`);

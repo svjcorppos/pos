@@ -2477,7 +2477,14 @@ function openEditModal(btn, orderDataString) {
 
   const tbody = document.getElementById('editOrderItems');
   tbody.innerHTML = '';
-  editingOrderData.forEach(item => addEditRow(item));
+
+  // Detect structure: if items array is nested inside firstOrder use that,
+  // otherwise editingOrderData itself is the flat items array
+  const itemsToRender = Array.isArray(firstOrder.items) && firstOrder.items.length > 0
+    ? firstOrder.items
+    : editingOrderData;
+
+  itemsToRender.forEach(item => addEditRow(item));
 
   document.getElementById('editOrderModal').style.display = 'block';
 }
@@ -2553,8 +2560,14 @@ rows.forEach((tr, index) => {
     const total = qty * price;
     newGrandTotal += total;
 
-updatedOrders.push({
-      ...(editingOrderData[index] || editingOrderData[0]),
+// Support both flat items array and nested items structure
+    const sourceItems = Array.isArray(editingOrderData[0].items) && editingOrderData[0].items.length > 0
+      ? editingOrderData[0].items
+      : editingOrderData;
+    const originalItem = sourceItems[index] || sourceItems[0] || {};
+
+    updatedOrders.push({
+      ...originalItem,
       product,
       qty,
       price,

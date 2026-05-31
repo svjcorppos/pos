@@ -2553,16 +2553,17 @@ rows.forEach((tr, index) => {
     const total = qty * price;
     newGrandTotal += total;
 
-const originalItem = Array.isArray(editingOrderData[0].items)
-      ? (editingOrderData[0].items[index] || {})
-      : (editingOrderData[index] || {});
-
-    updatedOrders.push({
-      ...originalItem,
+updatedOrders.push({
+      ...(editingOrderData[index] || editingOrderData[0]),
       product,
       qty,
       price,
-      total
+      total,
+      buyerName,
+      country,
+      destinationPort: destPort,
+      editedBy: loggedInProfile,
+      editedAt: new Date().toLocaleString('en-GB')
     });
   });
 
@@ -2573,42 +2574,43 @@ const originalItem = Array.isArray(editingOrderData[0].items)
   cells[3].innerHTML = `<span style="color:#d69e2e;">${loggedInProfile}</span>`;
   cells[4].innerHTML = `<span style="color:#d69e2e;">${new Date().toLocaleDateString('en-GB')}</span>`;
 
-  // Update dropdown with new data — full order object so postedDate is preserved in PDF
-  const newOrderData = JSON.stringify(JSON.stringify([{
-    orderNumber:     editingOrderData[0].orderNumber,
-    buyerName:       buyerName,
-    country:         country,
+  const editedOrderNumber = editingOrderData[0].orderNumber;
+  const originalPostedBy   = editingOrderData[0].postedBy   || '';
+  const originalPostedDate = editingOrderData[0].postedDate || '';
+
+  // Update dropdown with new data — carry original postedBy/postedDate forward
+  const newOrderData = JSON.stringify(JSON.stringify(updatedOrders.map(item => ({
+    ...item,
+    orderNumber:     editedOrderNumber,
+    buyerName,
+    country,
     destinationPort: destPort,
-    grandTotal:      newGrandTotal,
-    postedBy:        editingOrderData[0].postedBy || '',
-    postedDate:      editingOrderData[0].postedDate || '',
+    postedBy:        originalPostedBy,
+    postedDate:      originalPostedDate,
     editedBy:        loggedInProfile,
-    editedAt:        new Date().toLocaleString('en-GB'),
-    status:          'active',
-    items:           updatedOrders
-  }]));
+    editedAt:        new Date().toLocaleString('en-GB')
+  }))));
   const divs = editingRow.querySelectorAll('.dropdown-menu div');
   divs[0].setAttribute('onclick', `viewOrderPDF(${newOrderData})`);
   divs[1].setAttribute('onclick', `downloadOrderPDF(${newOrderData})`);
   divs[2].setAttribute('onclick', `openEditModal(this, ${newOrderData})`);
 
-const editedOrderNumber = editingOrderData[0].orderNumber;
   closeEditModal();
   addNotification('edited', '✏️', 'Order Edited', `${editedOrderNumber} edited by ${loggedInProfile}`);
   alert('Order updated successfully!');
 
   updateOrderInSheet({
-    orderNumber: editedOrderNumber,
+    orderNumber:     editedOrderNumber,
     buyerName,
     country,
     destinationPort: destPort,
-    items: JSON.stringify(updatedOrders),
-    grandTotal: newGrandTotal,
-    postedBy:   editingOrderData[0].postedBy   || '',
-    postedDate: editingOrderData[0].postedDate || '',
-    status: 'active',
-    editedBy: loggedInProfile,
-    editedAt: new Date().toLocaleString('en-GB')
+    items:           JSON.stringify(updatedOrders),
+    grandTotal:      newGrandTotal,
+    postedBy:        originalPostedBy,
+    postedDate:      originalPostedDate,
+    status:          'active',
+    editedBy:        loggedInProfile,
+    editedAt:        new Date().toLocaleString('en-GB')
   });
 }
 let notifications = [];

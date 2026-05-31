@@ -2605,8 +2605,8 @@ const editedOrderNumber = editingOrderData[0].orderNumber;
     destinationPort: destPort,
     items: JSON.stringify(updatedOrders),
     grandTotal: newGrandTotal,
-    postedBy: updatedOrders[0]?.postedBy || '',
-    postedDate: updatedOrders[0]?.postedDate || '',
+    postedBy:   editingOrderData[0].postedBy   || '',
+    postedDate: editingOrderData[0].postedDate || '',
     status: 'active',
     editedBy: loggedInProfile,
     editedAt: new Date().toLocaleString('en-GB')
